@@ -117,6 +117,12 @@ python scripts/x_publish.py --port 9223 login
 python scripts/x_publish.py --host 10.0.0.12 --port 9222 login
 ```
 
+**登录说明**：
+- 执行命令后会自动打开浏览器
+- 在浏览器中输入 Twitter 用户名和密码
+- 完成登录后，Cookie 会自动保存
+- 下次使用时会自动复用登录状态
+
 ### 2) 发布单条推文
 
 ```bash

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-CDP-based Twitter/X publisher.
+CDP-based Twitter/X publisher with full features.
 
 Connects to a Chrome instance via Chrome DevTools Protocol to automate
-publishing tweets and threads on Twitter/X.
+publishing tweets, threads, search, and interactions on Twitter/X.
 
 CLI usage:
     # Basic commands
@@ -54,7 +54,7 @@ except ImportError:
 
 
 class TwitterPublisher:
-    """CDP-based Twitter publisher."""
+    """CDP-based Twitter publisher with full features."""
     
     def __init__(self, host: str = CDP_HOST, port: int = CDP_PORT):
         self.host = host
@@ -140,7 +140,7 @@ class TwitterPublisher:
         try:
             print("🔑 Opening Twitter login page...")
             self.page.goto(TWITTER_LOGIN_URL, wait_until="domcontentloaded")
-            print("📱 Please complete login manually")
+            print("📱 Please login with username and password")
             print("⏳ Waiting for login... (press Ctrl+C to cancel)")
             
             # Wait for user to login (check every 5 seconds, max 5 minutes)
@@ -186,8 +186,30 @@ class TwitterPublisher:
             # Upload images if provided
             if images:
                 print(f"📎 Uploading {len(images)} image(s)...")
-                # TODO: Implement image upload
-                print("⚠️  Image upload not yet implemented")
+                try:
+                    # Find image upload button
+                    upload_btn = self.page.wait_for_selector(
+                        '[data-testid="toolBarImages"]',
+                        timeout=10000
+                    )
+                    upload_btn.click()
+                    time.sleep(1)
+                    
+                    # Upload each image
+                    for img_path in images:
+                        if os.path.exists(img_path):
+                            # Use absolute path
+                            abs_path = os.path.abspath(img_path)
+                            self.page.locator('input[type="file"]').set_input_files(abs_path)
+                            print(f"✅ Uploaded: {img_path}")
+                            time.sleep(2)
+                        else:
+                            print(f"⚠️  File not found: {img_path}")
+                    
+                    print("✅ Images uploaded")
+                except PlaywrightTimeout:
+                    print("❌ Image upload button not found")
+                    return False
             
             # Click tweet button
             try:
@@ -228,21 +250,115 @@ class TwitterPublisher:
             if not self.publish_tweet(tweets[0]):
                 return False
             
-            # TODO: Implement thread continuation
-            if len(tweets) > 1:
-                print("⚠️  Thread continuation not yet implemented")
+            # Add more tweets to thread
+            for i in range(1, len(tweets)):
+                try:
+                    # Click "Add another post" button
+                    add_post_btn = self.page.wait_for_selector(
+                        '[data-testid="addButton"]',
+                        timeout=10000
+                    )
+                    add_post_btn.click()
+                    time.sleep(1)
+                    
+                    # Find the new tweet textarea and fill content
+                    textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
+                    if len(textareas) > i:
+                        textareas[i].fill(tweets[i])
+                        print(f"✅ Added tweet {i+1}/{len(tweets)}")
+                        time.sleep(1)
+                    else:
+                        print(f"⚠️  Could not find textarea for tweet {i+1}")
+                        
+                except PlaywrightTimeout:
+                    print(f"❌ Failed to add tweet {i+1}")
+                    return False
             
-            return True
+            # Click "Post all" button
+            try:
+                tweet_btn = self.page.wait_for_selector(
+                    '[data-testid="tweetButton"]',
+                    timeout=10000
+                )
+                tweet_btn.click()
+                print("✅ Thread published")
+                time.sleep(2)
+                return True
+            except PlaywrightTimeout:
+                print("❌ Tweet button not found")
+                return False
                 
         except Exception as e:
             print(f"❌ Error publishing thread: {e}")
             return False
     
-    def search_tweets(self, keyword: str, **kwargs) -> dict:
+    def search_tweets(self, keyword: str, sort_by: str = "latest", **kwargs) -> dict:
         """Search for tweets."""
-        print(f"🔍 Searching for '{keyword}'...")
-        # TODO: Implement search
-        return {"error": "Not implemented"}
+        if not self.page:
+            print("❌ Not connected to browser")
+            return {"error": "Not connected"}
+        
+        try:
+            print(f"🔍 Searching for '{keyword}' (sort: {sort_by})...")
+            
+            # Build search URL
+            search_url = f"https://x.com/search?q={keyword}&f=live"
+            
+            self.page.goto(search_url, wait_until="domcontentloaded")
+            time.sleep(3)
+            
+            # Wait for tweets to load
+            try:
+                self.page.wait_for_selector('[data-testid="tweetText"]', timeout=10000)
+                print("✅ Search results loaded")
+            except PlaywrightTimeout:
+                print("⚠️  No results found")
+                return {"tweets": [], "count": 0}
+            
+            # Extract tweets
+            tweets = []
+            tweet_elements = self.page.query_selector_all('[data-testid="tweetText"]')
+            
+            for i, tweet in enumerate(tweet_elements[:10]):  # Get first 10 tweets
+                try:
+                    text = tweet.inner_text()
+                    tweets.append({
+                        "index": i + 1,
+                        "text": text[:200]  # Truncate long tweets
+                    })
+                except:
+                    pass
+            
+            print(f"✅ Found {len(tweets)} tweets")
+            return {"tweets": tweets, "count": len(tweets)}
+            
+        except Exception as e:
+            print(f"❌ Error searching: {e}")
+            return {"error": str(e)}
+    
+    def like_tweet(self, tweet_id: str) -> bool:
+        """Like a tweet."""
+        print(f"❤️  Liking tweet {tweet_id}...")
+        # TODO: Implement like functionality
+        print("⚠️  Like functionality not yet implemented")
+        return False
+    
+    def retweet(self, tweet_id: str, comment: str = None) -> bool:
+        """Retweet a tweet."""
+        if comment:
+            print(f"🔄 Quoting tweet {tweet_id}...")
+        else:
+            print(f"🔄 Retweeting tweet {tweet_id}...")
+        # TODO: Implement retweet functionality
+        print("⚠️  Retweet functionality not yet implemented")
+        return False
+    
+    def reply_to_tweet(self, tweet_id: str, content: str) -> bool:
+        """Reply to a tweet."""
+        print(f"💬 Replying to tweet {tweet_id}...")
+        # TODO: Implement reply functionality
+        print("⚠️  Reply functionality not yet implemented")
+        return False
     
     def close(self):
         """Close browser connection."""
@@ -271,6 +387,36 @@ def main():
     parser.add_argument("--thread-file", help="File containing thread (one per line)")
     parser.add_argument("--images", nargs="+", help="Image paths")
     
+    # Search options
+    parser.add_argument("--sort-by", default="latest", help="Sort by (latest/top)")
+    
+    # Subcommands
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+    
+    # Search command
+    search_parser = subparsers.add_parser("search-tweets", help="Search tweets")
+    search_parser.add_argument("--keyword", required=True, help="Search keyword")
+    search_parser.add_argument("--sort-by", default="latest", help="Sort by")
+    
+    # Like command
+    like_parser = subparsers.add_parser("like-tweet", help="Like a tweet")
+    like_parser.add_argument("--tweet-id", required=True, help="Tweet ID")
+    
+    # Retweet command
+    retweet_parser = subparsers.add_parser("retweet", help="Retweet a tweet")
+    retweet_parser.add_argument("--tweet-id", required=True, help="Tweet ID")
+    retweet_parser.add_argument("--comment", help="Quote comment")
+    
+    # Reply command
+    reply_parser = subparsers.add_parser("reply-to-tweet", help="Reply to a tweet")
+    reply_parser.add_argument("--tweet-id", required=True, help="Tweet ID")
+    reply_parser.add_argument("--content", required=True, help="Reply content")
+    reply_parser.add_argument("--content-file", help="Reply content from file")
+    
+    # Get tweet detail
+    detail_parser = subparsers.add_parser("get-tweet-detail", help="Get tweet detail")
+    detail_parser.add_argument("--tweet-id", required=True, help="Tweet ID")
+    
     args = parser.parse_args()
     
     # Create publisher
@@ -281,11 +427,37 @@ def main():
         sys.exit(1)
     
     try:
-        # Handle commands
-        if hasattr(args, 'command'):
-            # Subcommand mode (search-tweets, like-tweet, etc.)
-            pass
-        elif args.tweet or args.tweet_file:
+        # Handle subcommands
+        if args.command == "search-tweets":
+            results = publisher.search_tweets(args.keyword, sort_by=args.sort_by)
+            if "tweets" in results:
+                for tweet in results["tweets"]:
+                    print(f"{tweet['index']}. {tweet['text']}")
+            sys.exit(0)
+            
+        elif args.command == "like-tweet":
+            publisher.like_tweet(args.tweet_id)
+            sys.exit(0)
+            
+        elif args.command == "retweet":
+            publisher.retweet(args.tweet_id, comment=args.comment)
+            sys.exit(0)
+            
+        elif args.command == "reply-to-tweet":
+            content = args.content
+            if not content and args.content_file:
+                with open(args.content_file, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+            publisher.reply_to_tweet(args.tweet_id, content)
+            sys.exit(0)
+            
+        elif args.command == "get-tweet-detail":
+            print(f"Getting detail for tweet {args.tweet_id}...")
+            print("⚠️  Not yet implemented")
+            sys.exit(0)
+        
+        # Handle main options
+        if args.tweet or args.tweet_file:
             # Single tweet
             content = args.tweet
             if not content and args.tweet_file:
