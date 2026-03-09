@@ -198,6 +198,9 @@ class TwitterPublisher:
             tweet_box.fill(content)
             print("✅ Tweet content filled")
             
+            # Wait for content to be filled and button to become enabled
+            time.sleep(2)
+            
             # Upload images if provided
             if images:
                 print(f"📎 Uploading {len(images)} image(s)...")
@@ -241,6 +244,9 @@ class TwitterPublisher:
                 try:
                     tweet_btn = self.page.wait_for_selector(selector, timeout=5000)
                     print(f"✅ Found tweet button with: {selector}")
+                    # Wait for button to be enabled
+                    tweet_btn.wait_for_element_state("enabled", timeout=5000)
+                    print("✅ Tweet button is enabled")
                     break
                 except PlaywrightTimeout:
                     continue
@@ -250,8 +256,16 @@ class TwitterPublisher:
                 print("💡 Tip: Make sure tweet content is filled")
                 return False
             
-            tweet_btn.click()
-            print("✅ Tweet published")
+            # Try normal click first
+            try:
+                tweet_btn.click()
+                print("✅ Tweet published (normal click)")
+            except PlaywrightTimeout:
+                # If normal click fails, use JavaScript click
+                print("⚠️  Normal click failed, using JavaScript click...")
+                self.page.evaluate('(el) => el.click()', tweet_btn)
+                print("✅ Tweet published (JavaScript click)")
+            
             time.sleep(3)
             return True
                 
