@@ -469,36 +469,88 @@ class TwitterPublisher:
                             add_btn.click()
                             print("✅ Clicked add button (normal)")
                         
-                        # Wait longer for new textarea to appear
-                        time.sleep(5)
+                        # Wait and retry multiple times to find new textarea
+                        print("⏳ Waiting for new textarea to appear...")
+                        textareas = None
+                        for retry in range(5):
+                            time.sleep(3)
+                            
+                            # Scroll to bottom
+                            self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                            time.sleep(1)
+                            
+                            # Find textareas again
+                            textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
+                            print(f"🔍 Retry {retry+1}/5: Found {len(textareas)} textareas")
+                            
+                            if len(textareas) > i:
+                                print(f"✅ Found {len(textareas)} textareas after {retry+1} retries")
+                                break
                         
-                        # Scroll to bottom again
-                        self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-                        time.sleep(2)
-                        
-                        # Find textareas again
-                        textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
-                        print(f"🔍 Found {len(textareas)} textareas after clicking add button")
-                        
-                        if len(textareas) > i:
+                        if textareas and len(textareas) > i:
                             textareas[i].fill(tweets[i])
                             print(f"✅ Filled tweet {i+1}/{len(tweets)} ({len(tweets[i])} chars)")
                             time.sleep(1)
                             continue
+                        else:
+                            print(f"❌ Could not find textarea for tweet {i+1} after 5 retries")
                     
                     # Last resort: try to find any editable element
                     print("⚠️  Trying alternative method...")
                     editable_divs = self.page.query_selector_all('div[contenteditable="true"][role="textbox"]')
                     print(f"🔍 Found {len(editable_divs)} editable divs")
                     
-                    if len(editable_divs) >= i:
+                    # Check if we have enough elements
+                    if len(editable_divs) > i:
                         editable_divs[i].fill(tweets[i])
                         print(f"✅ Filled tweet {i+1}/{len(tweets)} (using contenteditable div)")
                         time.sleep(1)
+                    elif len(editable_divs) == i and i < len(tweets) - 1:
+                        # We have exactly i elements, need to add one more
+                        print(f"⚠️  Have {len(editable_divs)} divs, need {i+1}, trying one more time...")
+                        
+                        # Try clicking the add button one more time with longer wait
+                        if add_btn:
+                            try:
+                                self.page.evaluate('(el) => el.click()', add_btn)
+                                print("✅ Clicked add button again (JavaScript)")
+                                time.sleep(6)
+                                
+                                # Scroll to bottom
+                                self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                                time.sleep(2)
+                                
+                                # Check again
+                                editable_divs = self.page.query_selector_all('div[contenteditable="true"][role="textbox"]')
+                                print(f"🔍 Found {len(editable_divs)} editable divs after retry")
+                                
+                                if len(editable_divs) > i:
+                                    editable_divs[i].fill(tweets[i])
+                                    print(f"✅ Filled tweet {i+1}/{len(tweets)} (retry success)")
+                                    time.sleep(1)
+                                else:
+                                    print(f"❌ Still could not add tweet {i+1} after retry")
+                                    print(f"   Twitter may have limitations on thread length")
+                                    print(f"   Try publishing shorter threads (2-3 tweets)")
+                                    return False
+                            except Exception as retry_error:
+                                print(f"❌ Retry failed: {retry_error}")
+                                return False
+                        else:
+                            print(f"❌ No add button available for retry")
+                            return False
                     else:
                         print(f"❌ Could not find textarea for tweet {i+1}")
-                        print(f"   Expected at least {i+1} textareas, found {len(textareas)}")
-                        return False
+                        print(f"   Expected at least {i+1} textareas, found {len(editable_divs)}")
+                        print(f"⚠️  Twitter may have limitations on thread length")
+                        
+                        # If this is the last tweet, try to publish what we have
+                        if i == len(tweets) - 1:
+                            print(f"💡  Attempting to publish {i} tweets as a thread...")
+                            # Continue to publish what we have
+                        else:
+                            print(f"   Try publishing shorter threads (2-3 tweets)")
+                            return False
                                 
                 except Exception as e:
                     print(f"❌ Failed to add tweet {i+1}: {e}")
