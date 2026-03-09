@@ -399,19 +399,31 @@ class TwitterPublisher:
             for i in range(1, len(tweets)):
                 try:
                     # Wait a bit for the UI to update
-                    time.sleep(2)
+                    time.sleep(3)
                     
                     # Scroll into view to make sure button is visible
-                    self.page.evaluate('window.scrollBy(0, 200)')
-                    time.sleep(1)
+                    self.page.evaluate('window.scrollBy(0, 300)')
+                    time.sleep(2)
+                    
+                    # Find all tweet textareas first
+                    textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
+                    print(f"🔍 Found {len(textareas)} textareas before adding tweet {i+1}")
+                    
+                    # If we already have enough textareas, just fill the next one
+                    if len(textareas) > i:
+                        textareas[i].fill(tweets[i])
+                        print(f"✅ Filled tweet {i+1}/{len(tweets)} ({len(tweets[i])} chars)")
+                        time.sleep(1)
+                        continue
                     
                     # Try keyboard shortcut first: Ctrl+Enter to add another post
                     print(f"⌨️  Trying Ctrl+Enter to add tweet {i+1}...")
                     self.page.keyboard.press("Control+Enter")
-                    time.sleep(3)
+                    time.sleep(4)
                     
-                    # Find all tweet textareas
+                    # Find all tweet textareas again
                     textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
+                    print(f"🔍 Found {len(textareas)} textareas after Ctrl+Enter")
                     
                     if len(textareas) > i:
                         # Fill the new textarea
@@ -433,8 +445,8 @@ class TwitterPublisher:
                     add_btn = None
                     for selector in add_selectors:
                         try:
-                            add_btn = self.page.wait_for_selector(selector, timeout=3000)
-                            print(f"✅ Found add button")
+                            add_btn = self.page.wait_for_selector(selector, timeout=5000)
+                            print(f"✅ Found add button with: {selector[:50]}")
                             break
                         except PlaywrightTimeout:
                             continue
@@ -449,10 +461,11 @@ class TwitterPublisher:
                             add_btn.click()
                             print("✅ Clicked add button (normal)")
                         
-                        time.sleep(3)
+                        time.sleep(4)
                         
                         # Find textareas again
                         textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
+                        print(f"🔍 Found {len(textareas)} textareas after clicking add button")
                         
                         if len(textareas) > i:
                             textareas[i].fill(tweets[i])
@@ -463,6 +476,7 @@ class TwitterPublisher:
                     # Last resort: try to find any editable element
                     print("⚠️  Trying alternative method...")
                     editable_divs = self.page.query_selector_all('div[contenteditable="true"][role="textbox"]')
+                    print(f"🔍 Found {len(editable_divs)} editable divs")
                     
                     if len(editable_divs) >= i:
                         editable_divs[i].fill(tweets[i])
@@ -470,6 +484,7 @@ class TwitterPublisher:
                         time.sleep(1)
                     else:
                         print(f"❌ Could not find textarea for tweet {i+1}")
+                        print(f"   Expected at least {i+1} textareas, found {len(textareas)}")
                         return False
                                 
                 except Exception as e:
