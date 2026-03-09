@@ -47,10 +47,88 @@ metadata:
 
 ## 线程发布流程
 
-1. 准备输入（多条推文内容，按顺序）。
-2. 如需文件输入，先写入 `thread.txt`（每行一条推文）。
-3. 执行线程发布命令（默认无头）。
-4. 回传执行结果（成功/失败 + 第一条推文链接）。
+### 流程说明
+
+1. **准备输入**（多条推文内容，按顺序）
+2. **如需文件输入**，先写入 `thread.txt`（每行一条推文）
+3. **执行线程发布命令**（默认有窗口，便于观察）
+4. **回传执行结果**（成功/失败 + 推文链接）
+
+### 线程发布详细步骤
+
+1. 打开 Twitter 首页 (`https://x.com/home`)
+2. 定位到发推框 (`[data-testid="tweetTextarea_0"]`)
+3. 填写第一条推文内容
+4. 点击"Add another post"按钮（或按 Ctrl+Enter 快捷键）
+5. 填写第二条推文内容
+6. 重复步骤 4-5 直到所有推文填写完成
+7. 点击"Post all"按钮发布整个线程
+8. 等待发布成功确认
+
+### 线程发布示例
+
+**命令行示例**：
+```bash
+# 发布 3 条推文的线程
+python scripts/x_publish.py --port 9222 --reuse-existing \
+  --thread "第一条推文内容" "第二条推文内容" "第三条推文内容"
+
+# 发布带图片的线程（图片只添加到第一条推文）
+python scripts/x_publish.py --port 9222 --reuse-existing \
+  --thread "第一条" "第二条" "第三条" \
+  --images "./images/pic1.jpg" "./images/pic2.jpg"
+
+# 从文件读取线程（每行一条推文）
+python scripts/x_publish.py --port 9222 --reuse-existing \
+  --thread-file thread.txt
+```
+
+**thread.txt 文件格式示例**：
+```
+这是第一条推文，介绍主题。
+这是第二条推文，展开说明。
+这是第三条推文，总结要点。
+```
+
+### 线程发布注意事项
+
+- ✅ 每条推文不超过 280 字符
+- ✅ 单次最多发布 25 条推文
+- ✅ 图片只添加到第一条推文
+- ✅ 发布过程约需 10-30 秒（取决于推文数量）
+- ⚠️ 如果某条推文发布失败，整个线程会回滚
+- ⚠️ 检查网络连接是否稳定
+- ⚠️ 确保 Twitter 账号登录状态正常
+- ⚠️ 避免短时间内发布大量线程（可能被限流）
+
+### 线程发布预期输出
+
+```
+✅ Connected to Chrome
+🧵 Publishing thread (3 tweets)...
+✅ Found tweet box
+✅ Filled tweet 1/3 (20 chars)
+✅ Found add button
+✅ Filled tweet 2/3 (20 chars)
+✅ Found add button
+✅ Filled tweet 3/3 (20 chars)
+✅ Found post button
+✅ Post button is enabled
+✅ Thread published (normal click)
+✅ Thread publishing completed
+```
+
+### 线程发布失败处理
+
+**常见错误及解决方法**：
+
+| 错误 | 原因 | 解决方法 |
+|------|------|----------|
+| "Tweet box not found" | 页面未加载完成 | 等待页面加载，检查网络连接 |
+| "Add button not found" | UI 选择器已更新 | 更新选择器，使用键盘快捷键 Ctrl+Enter |
+| "Post button not found" | 按钮被遮挡 | 使用 JavaScript 强制点击 |
+| "Thread too long" | 超过 25 条推文限制 | 分成多个线程发布 |
+| "Tweet X too long" | 单条推文超过 280 字符 | 缩短推文内容 |
 
 ## 内容检索与互动流程
 

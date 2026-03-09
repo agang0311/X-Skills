@@ -300,64 +300,209 @@ class TwitterPublisher:
             print(f"❌ Error publishing tweet: {e}")
             return False
     
-    def publish_thread(self, tweets: List[str]) -> bool:
-        """Publish a thread of tweets."""
+    def publish_thread(self, tweets: List[str], images: List[str] = None) -> bool:
+        """Publish a thread of tweets with optional images."""
         if not self.page:
             print("❌ Not connected to browser")
+            return False
+        
+        if not tweets:
+            print("❌ No tweets provided")
             return False
         
         if len(tweets) > 25:
             print(f"❌ Thread too long ({len(tweets)} tweets, max 25)")
             return False
         
+        # Validate tweet lengths
+        for i, tweet in enumerate(tweets):
+            if len(tweet) > 280:
+                print(f"❌ Tweet {i+1} too long ({len(tweet)} chars, max 280)")
+                return False
+        
         try:
             print(f"🧵 Publishing thread ({len(tweets)} tweets)...")
             
             # Go to home page
             self.page.goto(TWITTER_HOME_URL, wait_until="domcontentloaded")
-            time.sleep(2)
+            time.sleep(3)
             
-            # Publish first tweet
-            if not self.publish_tweet(tweets[0]):
+            # Find and click tweet box
+            tweet_selectors = [
+                '[data-testid="tweetTextarea_0"]',
+                '[data-testid="tweetTextarea_1"]',
+                'div[contenteditable="true"][role="textbox"]',
+            ]
+            
+            tweet_box = None
+            for selector in tweet_selectors:
+                try:
+                    tweet_box = self.page.wait_for_selector(selector, timeout=5000)
+                    print(f"✅ Found tweet box")
+                    break
+                except PlaywrightTimeout:
+                    continue
+            
+            if not tweet_box:
+                print("❌ Tweet box not found")
                 return False
+            
+            tweet_box.click()
+            time.sleep(1)
+            
+            # Fill first tweet
+            tweet_box.fill(tweets[0])
+            print(f"✅ Filled tweet 1/{len(tweets)} ({len(tweets[0])} chars)")
+            time.sleep(1)
+            
+            # Upload images for first tweet if provided
+            if images:
+                print(f"📎 Uploading {len(images)} image(s) to first tweet...")
+                try:
+                    upload_selectors = [
+                        '[data-testid="toolBarImages"]',
+                        '[data-testid="toolBar-Images"]',
+                        '[aria-label*="media"]',
+                        '[aria-label*="Media"]',
+                    ]
+                    
+                    upload_btn = None
+                    for selector in upload_selectors:
+                        try:
+                            upload_btn = self.page.wait_for_selector(selector, timeout=3000)
+                            break
+                        except PlaywrightTimeout:
+                            continue
+                    
+                    if upload_btn:
+                        upload_btn.click()
+                        time.sleep(2)
+                        
+                        file_input = self.page.wait_for_selector('input[type="file"]', timeout=10000)
+                        
+                        for img_path in images:
+                            if os.path.exists(img_path):
+                                abs_path = os.path.abspath(img_path)
+                                file_input.set_input_files(abs_path)
+                                print(f"✅ Uploaded: {img_path}")
+                                time.sleep(3)
+                        
+                        print("✅ Images uploaded")
+                        time.sleep(2)
+                    else:
+                        print("⚠️  Upload button not found, skipping images")
+                        
+                except Exception as e:
+                    print(f"⚠️  Image upload failed: {e}")
             
             # Add more tweets to thread
             for i in range(1, len(tweets)):
                 try:
-                    # Click "Add another post" button
-                    add_post_btn = self.page.wait_for_selector(
-                        '[data-testid="addButton"]',
-                        timeout=10000
-                    )
-                    add_post_btn.click()
+                    # Wait a bit for the UI to update
                     time.sleep(1)
                     
-                    # Find the new tweet textarea and fill content
+                    # Try to find "Add another post" button
+                    add_selectors = [
+                        '[data-testid="addButton"]',
+                        'button:has-text("Add another post")',
+                        'button:has-text("添加")',
+                        'div[role="button"]:has-text("+")',
+                    ]
+                    
+                    add_btn = None
+                    for selector in add_selectors:
+                        try:
+                            add_btn = self.page.wait_for_selector(selector, timeout=5000)
+                            print(f"✅ Found add button")
+                            break
+                        except PlaywrightTimeout:
+                            continue
+                    
+                    if add_btn:
+                        add_btn.click()
+                        time.sleep(2)
+                    else:
+                        # If no add button, try to find all textareas
+                        print("⚠️  Add button not found, trying to find textareas...")
+                    
+                    # Find all tweet textareas
                     textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
+                    
                     if len(textareas) > i:
+                        # Fill the new textarea
                         textareas[i].fill(tweets[i])
-                        print(f"✅ Added tweet {i+1}/{len(tweets)}")
+                        print(f"✅ Filled tweet {i+1}/{len(tweets)} ({len(tweets[i])} chars)")
                         time.sleep(1)
                     else:
-                        print(f"⚠️  Could not find textarea for tweet {i+1}")
-                        
-                except PlaywrightTimeout:
-                    print(f"❌ Failed to add tweet {i+1}")
+                        # Try alternative: find contenteditable divs
+                        editable_divs = self.page.query_selector_all('div[contenteditable="true"][role="textbox"]')
+                        if len(editable_divs) > i:
+                            editable_divs[i].fill(tweets[i])
+                            print(f"✅ Filled tweet {i+1}/{len(tweets)} (using div)")
+                            time.sleep(1)
+                        else:
+                            print(f"⚠️  Could not find textarea for tweet {i+1}, trying keyboard shortcut...")
+                            # Try keyboard shortcut: Ctrl+Enter to add another post
+                            self.page.keyboard.press("Control+Enter")
+                            time.sleep(2)
+                            textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
+                            if len(textareas) > i:
+                                textareas[i].fill(tweets[i])
+                                print(f"✅ Filled tweet {i+1}/{len(tweets)} (using keyboard shortcut)")
+                            else:
+                                print(f"❌ Failed to add tweet {i+1}")
+                                return False
+                                
+                except Exception as e:
+                    print(f"❌ Failed to add tweet {i+1}: {e}")
                     return False
             
+            # Wait for all tweets to be filled
+            time.sleep(2)
+            
             # Click "Post all" button
-            try:
-                tweet_btn = self.page.wait_for_selector(
-                    '[data-testid="tweetButton"]',
-                    timeout=10000
-                )
-                tweet_btn.click()
-                print("✅ Thread published")
-                time.sleep(2)
-                return True
-            except PlaywrightTimeout:
-                print("❌ Tweet button not found")
+            button_selectors = [
+                '[data-testid="tweetButton"]',
+                '[data-testid="tweetButtonInline"]',
+                'button[aria-label="Post"]',
+                'button[aria-label="发布"]',
+                'button:has-text("发布")',
+                'button:has-text("Post all")',
+                'button:has-text("全部发布")',
+            ]
+            
+            tweet_btn = None
+            for selector in button_selectors:
+                try:
+                    tweet_btn = self.page.wait_for_selector(selector, timeout=5000)
+                    print(f"✅ Found post button")
+                    break
+                except PlaywrightTimeout:
+                    continue
+            
+            if not tweet_btn:
+                print("❌ Post button not found")
                 return False
+            
+            # Wait for button to be enabled
+            try:
+                tweet_btn.wait_for_element_state("enabled", timeout=5000)
+                print("✅ Post button is enabled")
+            except PlaywrightTimeout:
+                print("⚠️  Post button may be disabled, trying anyway...")
+            
+            # Click button
+            try:
+                tweet_btn.click()
+                print("✅ Thread published (normal click)")
+            except PlaywrightTimeout:
+                print("⚠️  Normal click failed, using JavaScript click...")
+                self.page.evaluate('(el) => el.click()', tweet_btn)
+                print("✅ Thread published (JavaScript click)")
+            
+            time.sleep(3)
+            print("✅ Thread publishing completed")
+            return True
                 
         except Exception as e:
             print(f"❌ Error publishing thread: {e}")
