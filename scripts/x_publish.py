@@ -205,28 +205,55 @@ class TwitterPublisher:
             if images:
                 print(f"📎 Uploading {len(images)} image(s)...")
                 try:
-                    # Find image upload button
-                    upload_btn = self.page.wait_for_selector(
+                    # Find image upload button (try multiple selectors)
+                    upload_btn = None
+                    upload_selectors = [
                         '[data-testid="toolBarImages"]',
-                        timeout=10000
-                    )
+                        '[data-testid="toolBar-Images"]',
+                        '[aria-label*="media"]',
+                        '[aria-label*="Media"]',
+                        '[aria-label*="图片"]',
+                        '[aria-label*="照片"]',
+                        'button[title*="media"]',
+                        'button[title*="Media"]',
+                        'button[title*="图片"]',
+                    ]
+                    
+                    for selector in upload_selectors:
+                        try:
+                            upload_btn = self.page.wait_for_selector(selector, timeout=3000)
+                            print(f"✅ Found upload button with: {selector}")
+                            break
+                        except PlaywrightTimeout:
+                            continue
+                    
+                    if not upload_btn:
+                        print("❌ Image upload button not found (tried multiple selectors)")
+                        print("💡 Tip: Make sure tweet box is focused")
+                        return False
+                    
                     upload_btn.click()
-                    time.sleep(1)
+                    time.sleep(2)
+                    
+                    # Wait for file input to appear
+                    file_input = self.page.wait_for_selector('input[type="file"]', timeout=10000)
                     
                     # Upload each image
                     for img_path in images:
                         if os.path.exists(img_path):
                             # Use absolute path
                             abs_path = os.path.abspath(img_path)
-                            self.page.locator('input[type="file"]').set_input_files(abs_path)
+                            file_input.set_input_files(abs_path)
                             print(f"✅ Uploaded: {img_path}")
-                            time.sleep(2)
+                            time.sleep(3)
                         else:
                             print(f"⚠️  File not found: {img_path}")
                     
                     print("✅ Images uploaded")
-                except PlaywrightTimeout:
-                    print("❌ Image upload button not found")
+                    time.sleep(2)
+                except PlaywrightTimeout as e:
+                    print(f"❌ Image upload failed: {e}")
+                    print("💡 Tip: Check if image path is correct")
                     return False
             
             # Click tweet button (try multiple selectors)
