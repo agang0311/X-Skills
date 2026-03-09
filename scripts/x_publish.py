@@ -168,20 +168,35 @@ class TwitterPublisher:
             
             # Go to home page
             self.page.goto(TWITTER_HOME_URL, wait_until="domcontentloaded")
-            time.sleep(2)
+            time.sleep(3)
             
-            # Find and click tweet box
-            try:
-                tweet_box = self.page.wait_for_selector(
-                    '[data-testid="tweetTextarea_0"]',
-                    timeout=10000
-                )
-                tweet_box.click()
-                tweet_box.fill(content)
-                print("✅ Tweet content filled")
-            except PlaywrightTimeout:
-                print("❌ Tweet box not found")
+            # Find and click tweet box (try multiple selectors)
+            tweet_box = None
+            tweet_selectors = [
+                '[data-testid="tweetTextarea_0"]',
+                '[data-testid="tweetTextarea_1"]',
+                'div[contenteditable="true"][role="textbox"]',
+                'textarea[aria-label*="Tweet"]',
+                'textarea[aria-label*="发推"]',
+            ]
+            
+            for selector in tweet_selectors:
+                try:
+                    tweet_box = self.page.wait_for_selector(selector, timeout=5000)
+                    print(f"✅ Found tweet box with: {selector}")
+                    break
+                except PlaywrightTimeout:
+                    continue
+            
+            if not tweet_box:
+                print("❌ Tweet box not found (tried multiple selectors)")
+                print("💡 Tip: Make sure you're on Twitter home page")
                 return False
+            
+            tweet_box.click()
+            time.sleep(1)
+            tweet_box.fill(content)
+            print("✅ Tweet content filled")
             
             # Upload images if provided
             if images:
@@ -211,19 +226,34 @@ class TwitterPublisher:
                     print("❌ Image upload button not found")
                     return False
             
-            # Click tweet button
-            try:
-                tweet_btn = self.page.wait_for_selector(
-                    '[data-testid="tweetButton"]',
-                    timeout=10000
-                )
-                tweet_btn.click()
-                print("✅ Tweet published")
-                time.sleep(2)
-                return True
-            except PlaywrightTimeout:
-                print("❌ Tweet button not found")
+            # Click tweet button (try multiple selectors)
+            tweet_btn = None
+            button_selectors = [
+                '[data-testid="tweetButton"]',
+                '[data-testid="tweetButtonInline"]',
+                'button[aria-label="Post"]',
+                'button[aria-label="发布"]',
+                'button:has-text("发布")',
+                'button:has-text("Post")',
+            ]
+            
+            for selector in button_selectors:
+                try:
+                    tweet_btn = self.page.wait_for_selector(selector, timeout=5000)
+                    print(f"✅ Found tweet button with: {selector}")
+                    break
+                except PlaywrightTimeout:
+                    continue
+            
+            if not tweet_btn:
+                print("❌ Tweet button not found (tried multiple selectors)")
+                print("💡 Tip: Make sure tweet content is filled")
                 return False
+            
+            tweet_btn.click()
+            print("✅ Tweet published")
+            time.sleep(3)
+            return True
                 
         except Exception as e:
             print(f"❌ Error publishing tweet: {e}")
@@ -393,6 +423,13 @@ def main():
     # Subcommands
     subparsers = parser.add_subparsers(dest="command", help="Commands")
     
+    # Check login command
+    check_parser = subparsers.add_parser("check-login", help="Check login status")
+    check_parser.add_argument("--headless", action="store_true", help="Run headless")
+    
+    # Login command
+    login_parser = subparsers.add_parser("login", help="Login to Twitter")
+    
     # Search command
     search_parser = subparsers.add_parser("search-tweets", help="Search tweets")
     search_parser.add_argument("--keyword", required=True, help="Search keyword")
@@ -428,7 +465,18 @@ def main():
     
     try:
         # Handle subcommands
-        if args.command == "search-tweets":
+        if args.command == "check-login":
+            if publisher.check_login():
+                print("✅ You are logged in to Twitter")
+            else:
+                print("❌ Not logged in. Run: python x_publish.py login")
+            sys.exit(0)
+            
+        elif args.command == "login":
+            publisher.login()
+            sys.exit(0)
+            
+        elif args.command == "search-tweets":
             results = publisher.search_tweets(args.keyword, sort_by=args.sort_by)
             if "tweets" in results:
                 for tweet in results["tweets"]:
