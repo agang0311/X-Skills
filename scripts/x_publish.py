@@ -399,31 +399,16 @@ class TwitterPublisher:
             for i in range(1, len(tweets)):
                 try:
                     # Wait a bit for the UI to update
+                    time.sleep(2)
+                    
+                    # Scroll into view to make sure button is visible
+                    self.page.evaluate('window.scrollBy(0, 200)')
                     time.sleep(1)
                     
-                    # Try to find "Add another post" button
-                    add_selectors = [
-                        '[data-testid="addButton"]',
-                        'button:has-text("Add another post")',
-                        'button:has-text("添加")',
-                        'div[role="button"]:has-text("+")',
-                    ]
-                    
-                    add_btn = None
-                    for selector in add_selectors:
-                        try:
-                            add_btn = self.page.wait_for_selector(selector, timeout=5000)
-                            print(f"✅ Found add button")
-                            break
-                        except PlaywrightTimeout:
-                            continue
-                    
-                    if add_btn:
-                        add_btn.click()
-                        time.sleep(2)
-                    else:
-                        # If no add button, try to find all textareas
-                        print("⚠️  Add button not found, trying to find textareas...")
+                    # Try keyboard shortcut first: Ctrl+Enter to add another post
+                    print(f"⌨️  Trying Ctrl+Enter to add tweet {i+1}...")
+                    self.page.keyboard.press("Control+Enter")
+                    time.sleep(3)
                     
                     # Find all tweet textareas
                     textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
@@ -433,28 +418,64 @@ class TwitterPublisher:
                         textareas[i].fill(tweets[i])
                         print(f"✅ Filled tweet {i+1}/{len(tweets)} ({len(tweets[i])} chars)")
                         time.sleep(1)
-                    else:
-                        # Try alternative: find contenteditable divs
-                        editable_divs = self.page.query_selector_all('div[contenteditable="true"][role="textbox"]')
-                        if len(editable_divs) > i:
-                            editable_divs[i].fill(tweets[i])
-                            print(f"✅ Filled tweet {i+1}/{len(tweets)} (using div)")
+                        continue
+                    
+                    # If keyboard shortcut didn't work, try clicking add button
+                    print("⚠️  Ctrl+Enter didn't work, trying add button...")
+                    
+                    add_selectors = [
+                        '[data-testid="addButton"]',
+                        'button[aria-label*="Add another post"]',
+                        'button[aria-label*="添加"]',
+                        'div[role="button"]:has-text("+")',
+                    ]
+                    
+                    add_btn = None
+                    for selector in add_selectors:
+                        try:
+                            add_btn = self.page.wait_for_selector(selector, timeout=3000)
+                            print(f"✅ Found add button")
+                            break
+                        except PlaywrightTimeout:
+                            continue
+                    
+                    if add_btn:
+                        # Try JavaScript click to avoid blocking issues
+                        try:
+                            self.page.evaluate('(el) => el.click()', add_btn)
+                            print("✅ Clicked add button (JavaScript)")
+                        except Exception as e:
+                            print(f"⚠️  JavaScript click failed: {e}")
+                            add_btn.click()
+                            print("✅ Clicked add button (normal)")
+                        
+                        time.sleep(3)
+                        
+                        # Find textareas again
+                        textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
+                        
+                        if len(textareas) > i:
+                            textareas[i].fill(tweets[i])
+                            print(f"✅ Filled tweet {i+1}/{len(tweets)} ({len(tweets[i])} chars)")
                             time.sleep(1)
-                        else:
-                            print(f"⚠️  Could not find textarea for tweet {i+1}, trying keyboard shortcut...")
-                            # Try keyboard shortcut: Ctrl+Enter to add another post
-                            self.page.keyboard.press("Control+Enter")
-                            time.sleep(2)
-                            textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
-                            if len(textareas) > i:
-                                textareas[i].fill(tweets[i])
-                                print(f"✅ Filled tweet {i+1}/{len(tweets)} (using keyboard shortcut)")
-                            else:
-                                print(f"❌ Failed to add tweet {i+1}")
-                                return False
+                            continue
+                    
+                    # Last resort: try to find any editable element
+                    print("⚠️  Trying alternative method...")
+                    editable_divs = self.page.query_selector_all('div[contenteditable="true"][role="textbox"]')
+                    
+                    if len(editable_divs) >= i:
+                        editable_divs[i].fill(tweets[i])
+                        print(f"✅ Filled tweet {i+1}/{len(tweets)} (using contenteditable div)")
+                        time.sleep(1)
+                    else:
+                        print(f"❌ Could not find textarea for tweet {i+1}")
+                        return False
                                 
                 except Exception as e:
                     print(f"❌ Failed to add tweet {i+1}: {e}")
+                    import traceback
+                    traceback.print_exc()
                     return False
             
             # Wait for all tweets to be filled
