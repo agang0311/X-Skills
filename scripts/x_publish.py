@@ -401,8 +401,8 @@ class TwitterPublisher:
                     # Wait a bit for the UI to update
                     time.sleep(3)
                     
-                    # Scroll into view to make sure button is visible
-                    self.page.evaluate('window.scrollBy(0, 300)')
+                    # Scroll to bottom to make sure new textarea is visible
+                    self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
                     time.sleep(2)
                     
                     # Find all tweet textareas first
@@ -419,7 +419,11 @@ class TwitterPublisher:
                     # Try keyboard shortcut first: Ctrl+Enter to add another post
                     print(f"⌨️  Trying Ctrl+Enter to add tweet {i+1}...")
                     self.page.keyboard.press("Control+Enter")
-                    time.sleep(4)
+                    time.sleep(5)
+                    
+                    # Scroll to bottom again
+                    self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                    time.sleep(2)
                     
                     # Find all tweet textareas again
                     textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
@@ -452,6 +456,10 @@ class TwitterPublisher:
                             continue
                     
                     if add_btn:
+                        # Scroll add button into view
+                        add_btn.scroll_into_view_if_needed()
+                        time.sleep(1)
+                        
                         # Try JavaScript click to avoid blocking issues
                         try:
                             self.page.evaluate('(el) => el.click()', add_btn)
@@ -461,7 +469,12 @@ class TwitterPublisher:
                             add_btn.click()
                             print("✅ Clicked add button (normal)")
                         
-                        time.sleep(4)
+                        # Wait longer for new textarea to appear
+                        time.sleep(5)
+                        
+                        # Scroll to bottom again
+                        self.page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                        time.sleep(2)
                         
                         # Find textareas again
                         textareas = self.page.query_selector_all('[data-testid="tweetTextarea_0"]')
